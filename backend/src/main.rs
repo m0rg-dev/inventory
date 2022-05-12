@@ -25,12 +25,12 @@ fn main() {
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS tag_associations (
-        item_id STRING,
-        key STRING,
-        value STRING,
+        item_id STRING NOT NULL,
+        key STRING NOT NULL,
+        value STRING NOT NULL,
         FOREIGN KEY(item_id) REFERENCES items(id),
-        UNIQUE(item_id, key)
-    )",
+        PRIMARY KEY(item_id, key)
+    ) WITHOUT ROWID",
         [],
     )
     .unwrap();
