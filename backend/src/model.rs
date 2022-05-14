@@ -2,11 +2,12 @@ use std::{collections::HashMap, vec};
 
 use chrono::NaiveDateTime;
 use rusqlite::named_params;
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::db::{FromRow, LoadableBy, Obj, Saveable};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 #[allow(dead_code)]
 pub struct Item {
     pub id: String,
@@ -49,7 +50,7 @@ impl Obj for Item {
     }
 
     fn where_params(id: &Self::Id) -> Vec<(&str, &dyn rusqlite::ToSql)> {
-        vec![("id", id)]
+        vec![(":id", id)]
     }
 
     fn key_columns(&self) -> Vec<(&str, &dyn rusqlite::ToSql)> {
@@ -79,7 +80,7 @@ impl Obj for Item {
                 key: k,
                 value: v,
             })
-            .try_for_each(|t| t.__save_no_savepoint(conn))?;
+            .try_for_each(|mut t| t.__save_no_savepoint(conn))?;
 
         Ok(())
     }

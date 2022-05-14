@@ -1,4 +1,5 @@
 use rusqlite::{params_from_iter, Connection, Row};
+use tracing::{event, Level};
 
 pub trait FromRow: Sized {
     fn from_row<'row, 'stmt: 'row>(row: &'row Row<'stmt>) -> Result<Self, rusqlite::Error>;
@@ -37,6 +38,8 @@ pub trait Loadable: FromRow {
 
     fn load(id: Self::Id, conn: &Connection) -> Result<Option<Self>, rusqlite::Error> {
         let mut stmt = conn.prepare(&Self::select_by())?;
+
+        event!(Level::DEBUG, "query: {}", Self::select_by());
 
         let mut res = stmt.query_and_then::<_, rusqlite::Error, _, _>(
             Self::select_params(&id).as_slice(),
@@ -90,13 +93,13 @@ pub trait Saveable: Sized {
         Ok(())
     }
 
-    fn save(self, conn: &mut Connection) -> Result<(), rusqlite::Error> {
+    fn save(&mut self, conn: &mut Connection) -> Result<(), rusqlite::Error> {
         let sp = conn.savepoint()?;
         self.__save_no_savepoint(&sp)?;
         sp.commit()
     }
 
-    fn __save_no_savepoint(self, conn: &Connection) -> Result<(), rusqlite::Error> {
+    fn __save_no_savepoint(&mut self, conn: &Connection) -> Result<(), rusqlite::Error> {
         let mut all_columns = self.key_columns();
         all_columns.append(&mut self.data_columns());
 
