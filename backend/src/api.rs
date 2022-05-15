@@ -80,7 +80,7 @@ pub async fn put_tag(
     let item = handle_sql_error(Item::load(id.to_string(), &tx))?;
     if let Some(mut item) = item {
         item.set_tag(tag, String::from_utf8_lossy(&body).to_string());
-        handle_sql_error(item.save(&mut tx))?;
+        // handle_sql_error(item.save(&mut tx))?;
         return Ok(Json(item));
     } else {
         return Err((StatusCode::NOT_FOUND, "Not Found\n".into()));

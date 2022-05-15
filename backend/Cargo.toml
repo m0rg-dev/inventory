@@ -18,3 +18,4 @@ tower = "0.4"
 tower-http = { version = "0.3", features = ["trace"] }
 tracing = "0.1"
 hyper = "0.14"
+sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "sqlite", "chrono"]}
