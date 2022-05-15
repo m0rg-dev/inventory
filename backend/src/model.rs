@@ -6,6 +6,7 @@ use std::{
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+use tracing::{span, Level};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -37,6 +38,10 @@ impl Item {
     pub fn set_tag(&mut self, key: String, value: String) {
         self.tags.insert(key, value);
     }
+
+    pub fn delete_tag(&mut self, key: String) {
+        self.tags.remove(&key);
+    }
 }
 
 #[derive(Default)]
@@ -64,6 +69,9 @@ impl DatabaseImpl {
 
     // TODO this interface sucks
     pub async fn load(&mut self) -> Result<(), std::io::Error> {
+        let span = span!(Level::TRACE, "db load");
+        let _enter = span.enter();
+
         let meta = tokio::fs::metadata(Self::DB_PATH).await;
         if meta.is_err() {
             // save to create the file. if the I/O error was for something other
@@ -86,6 +94,9 @@ impl DatabaseImpl {
     }
 
     pub async fn save(&self) -> Result<(), std::io::Error> {
+        let span = span!(Level::TRACE, "db save");
+        let _enter = span.enter();
+
         let path = format!("{}.tmp-{}", Self::DB_PATH, Uuid::new_v4());
 
         let tmpfile = tokio::fs::File::create(&path).await?;

@@ -6,6 +6,7 @@ use axum::{
     Extension, Json,
 };
 use axum_macros::debug_handler;
+use chrono::Local;
 use serde::Deserialize;
 use tracing::{event, Level};
 use uuid::Uuid;
@@ -26,6 +27,16 @@ pub async fn get_item(
         Some(item) => Ok(Json(item.clone())),
         None => Err((StatusCode::NOT_FOUND, "Not Found\n".into())),
     }
+}
+
+#[debug_handler]
+pub async fn get_items(
+    Extension(state): Extension<Arc<State>>,
+) -> Result<Json<Vec<Uuid>>, (StatusCode, String)> {
+    let mut db = state.db.lock().await;
+    handle_io_error(db.load().await)?;
+
+    Ok(Json(db.keys().cloned().collect()))
 }
 
 #[derive(Deserialize)]
@@ -59,6 +70,53 @@ pub async fn post_item(
     Ok(Json(i))
 }
 
+pub async fn check_out(
+    Path(id): Path<Uuid>,
+    Extension(state): Extension<Arc<State>>,
+) -> Result<Json<Item>, (StatusCode, String)> {
+    let mut db = state.db.lock().await;
+    handle_io_error(db.load().await)?;
+
+    let item = db.get(&id).cloned();
+
+    if let Some(mut item) = item {
+        // if it's already checked out, just NOP
+        if item.checked_out.is_none() {
+            item.checked_out = Some(Local::now().naive_local());
+        }
+
+        db.insert(item.id, item.clone());
+
+        handle_io_error(db.save().await)?;
+
+        Ok(Json(item))
+    } else {
+        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
+    }
+}
+
+pub async fn check_in(
+    Path(id): Path<Uuid>,
+    Extension(state): Extension<Arc<State>>,
+) -> Result<Json<Item>, (StatusCode, String)> {
+    let mut db = state.db.lock().await;
+    handle_io_error(db.load().await)?;
+
+    let item = db.get(&id).cloned();
+
+    if let Some(mut item) = item {
+        item.checked_out = None;
+
+        db.insert(item.id, item.clone());
+
+        handle_io_error(db.save().await)?;
+
+        Ok(Json(item))
+    } else {
+        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
+    }
+}
+
 #[debug_handler]
 pub async fn put_tag(
     Path((id, tag)): Path<(Uuid, String)>,
@@ -75,6 +133,26 @@ pub async fn put_tag(
     let item = db.get(&id).cloned();
     if let Some(mut item) = item {
         item.set_tag(tag, String::from_utf8_lossy(&body).to_string());
+        db.insert(item.id, item.clone());
+
+        handle_io_error(db.save().await)?;
+
+        Ok(Json(item))
+    } else {
+        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
+    }
+}
+
+pub async fn delete_tag(
+    Path((id, tag)): Path<(Uuid, String)>,
+    Extension(state): Extension<Arc<State>>,
+) -> Result<Json<Item>, (StatusCode, String)> {
+    let mut db = state.db.lock().await;
+    handle_io_error(db.load().await)?;
+
+    let item = db.get(&id).cloned();
+    if let Some(mut item) = item {
+        item.delete_tag(tag);
         db.insert(item.id, item.clone());
 
         handle_io_error(db.save().await)?;
