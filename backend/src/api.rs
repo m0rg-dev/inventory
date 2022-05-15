@@ -1,9 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
-    extract::{BodyStream, Path, Query, RawBody},
+    extract::{Path, RawBody},
     http::StatusCode,
-    response::IntoResponse,
     Extension, Json,
 };
 use axum_macros::debug_handler;
@@ -11,23 +10,20 @@ use serde::Deserialize;
 use tracing::{event, Level};
 use uuid::Uuid;
 
-use crate::{
-    db::{Loadable, Saveable},
-    model::Item,
-    State,
-};
+use crate::{model::Item, State};
 
 #[debug_handler]
 pub async fn get_item(
     Path(id): Path<Uuid>,
     Extension(state): Extension<Arc<State>>,
 ) -> Result<Json<Item>, (StatusCode, String)> {
-    let conn = state.db_conn.lock().await;
+    let mut db = state.db.lock().await;
+    handle_io_error(db.load().await)?;
 
-    let item = handle_sql_error(Item::load(id.to_string(), &conn))?;
+    let item = db.get(&id);
 
     match item {
-        Some(item) => Ok(Json(item)),
+        Some(item) => Ok(Json(item.clone())),
         None => Err((StatusCode::NOT_FOUND, "Not Found\n".into())),
     }
 }
@@ -47,19 +43,18 @@ pub async fn post_item(
     Json(args): Json<PostItem>,
     Extension(state): Extension<Arc<State>>,
 ) -> Result<Json<Item>, (StatusCode, String)> {
-    let mut conn = state.db_conn.lock().await;
+    let mut db = state.db.lock().await;
+    handle_io_error(db.load().await)?;
 
-    let mut i = Item::new(
-        args.description,
-        args.is_container,
-        args.parent_container.map(|u| u.to_string()),
-    );
+    let mut i = Item::new(args.description, args.is_container, args.parent_container);
 
     for (k, v) in args.tags {
         i.set_tag(k, v);
     }
 
-    handle_sql_error(i.save(&mut conn))?;
+    db.insert(i.id, i.clone());
+
+    handle_io_error(db.save().await)?;
 
     Ok(Json(i))
 }
@@ -74,25 +69,28 @@ pub async fn put_tag(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let mut conn = state.db_conn.lock().await;
-    let mut tx = handle_sql_error(conn.transaction())?;
+    let mut db = state.db.lock().await;
+    handle_io_error(db.load().await)?;
 
-    let item = handle_sql_error(Item::load(id.to_string(), &tx))?;
+    let item = db.get(&id).cloned();
     if let Some(mut item) = item {
         item.set_tag(tag, String::from_utf8_lossy(&body).to_string());
-        // handle_sql_error(item.save(&mut tx))?;
-        return Ok(Json(item));
+        db.insert(item.id, item.clone());
+
+        handle_io_error(db.save().await)?;
+
+        Ok(Json(item))
     } else {
-        return Err((StatusCode::NOT_FOUND, "Not Found\n".into()));
+        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
     }
 }
 
-fn handle_sql_error<T>(r: Result<T, rusqlite::Error>) -> Result<T, (StatusCode, String)> {
+fn handle_io_error<T>(r: Result<T, std::io::Error>) -> Result<T, (StatusCode, String)> {
     r.map_err(|e| {
-        event!(Level::ERROR, "Internal database error: {e}");
+        event!(Level::ERROR, "Internal server error: {e}");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Internal database error: {e}\n"),
+            format!("Internal server error: {e}\n"),
         )
     })
 }

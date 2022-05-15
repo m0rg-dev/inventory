@@ -1,29 +1,30 @@
-use std::{collections::HashMap, vec};
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+};
 
 use chrono::NaiveDateTime;
-use rusqlite::named_params;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::db::{FromRow, LoadableBy, Obj, Saveable};
-
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[allow(dead_code)]
 pub struct Item {
-    pub id: String,
+    pub id: Uuid,
     pub description: String,
     pub is_container: bool,
     pub checked_out: Option<NaiveDateTime>,
     pub destroyed: Option<NaiveDateTime>,
-    pub parent_container: Option<String>,
+    pub parent_container: Option<Uuid>,
 
     tags: HashMap<String, String>,
 }
 
 impl Item {
-    pub fn new(description: String, is_container: bool, parent_container: Option<String>) -> Self {
+    pub fn new(description: String, is_container: bool, parent_container: Option<Uuid>) -> Self {
         Item {
-            id: Uuid::new_v4().to_string(),
+            id: Uuid::new_v4(),
             description,
             is_container,
             checked_out: None,
@@ -38,154 +39,73 @@ impl Item {
     }
 }
 
-impl Obj for Item {
-    type Id = String;
+#[derive(Default)]
+pub struct Database(Mutex<DatabaseImpl>);
 
-    fn table_name() -> String {
-        "items".into()
+impl Deref for Database {
+    type Target = Mutex<DatabaseImpl>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
+}
 
-    fn where_clause() -> String {
-        "id = :id".into()
-    }
+#[derive(Default)]
+pub struct DatabaseImpl {
+    contents: HashMap<Uuid, Item>,
+}
 
-    fn where_params(id: &Self::Id) -> Vec<(&str, &dyn rusqlite::ToSql)> {
-        vec![(":id", id)]
-    }
+impl DatabaseImpl {
+    const DB_PATH: &'static str = "inventory.json";
 
-    fn key_columns(&self) -> Vec<(&str, &dyn rusqlite::ToSql)> {
-        named_params! {
-            "id": self.id
+    // we can assume that anything in here will not be called concurrently with
+    // anything else - all consumers of this API will be using it through a
+    // Mutex.
+
+    // TODO this interface sucks
+    pub async fn load(&mut self) -> Result<(), std::io::Error> {
+        let meta = tokio::fs::metadata(Self::DB_PATH).await;
+        if meta.is_err() {
+            // save to create the file. if the I/O error was for something other
+            // than the file not existing, we'll find out here.
+            Self {
+                ..Default::default()
+            }
+            .save()
+            .await?;
         }
-        .to_vec()
-    }
 
-    fn data_columns(&self) -> Vec<(&str, &dyn rusqlite::ToSql)> {
-        named_params! {
-            "description": self.description,
-            "is_container": self.is_container,
-            "checked_out": self.checked_out,
-            "destroyed": self.destroyed,
-            "parent_container": self.parent_container,
-        }
-        .to_vec()
-    }
+        let f = tokio::fs::File::open(Self::DB_PATH).await?;
+        //let reader = tokio::io::BufReader::new(f);
 
-    fn post_save_hook(&self, conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
-        self.tags
-            .clone()
-            .into_iter()
-            .map(|(k, v)| Tag {
-                item_id: self.id.clone(),
-                key: k,
-                value: v,
-            })
-            .try_for_each(|mut t| t.__save_no_savepoint(conn))?;
+        // panicking if the DB is invalid JSON seems reasonable here - that's a
+        // "come sort it out yourself" sort of situation.
+        self.contents = serde_json::from_reader(f.into_std().await).unwrap();
 
         Ok(())
     }
 
-    fn post_load_hook(&mut self, conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
-        let tags = Tag::load_by(&TagLoadableBy::ItemId(self.id.clone()), conn)?;
+    pub async fn save(&self) -> Result<(), std::io::Error> {
+        let path = format!("{}.tmp-{}", Self::DB_PATH, Uuid::new_v4());
 
-        tags.into_iter().for_each(|t| self.set_tag(t.key, t.value));
+        let tmpfile = tokio::fs::File::create(&path).await?;
 
-        Ok(())
+        serde_json::to_writer_pretty(tmpfile.into_std().await, &self.contents).unwrap();
+
+        tokio::fs::rename(path, Self::DB_PATH).await
     }
 }
 
-impl FromRow for Item {
-    fn from_row<'row, 'stmt: 'row>(
-        row: &'row rusqlite::Row<'stmt>,
-    ) -> Result<Self, rusqlite::Error> {
-        Ok(Item {
-            id: row.get(0)?,
-            description: row.get(1)?,
-            is_container: row.get(2)?,
-            checked_out: row.get(3)?,
-            destroyed: row.get(4)?,
-            parent_container: row.get(5)?,
-            tags: HashMap::new(),
-        })
+impl Deref for DatabaseImpl {
+    type Target = HashMap<Uuid, Item>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.contents
     }
 }
 
-#[allow(dead_code)]
-pub enum ItemLoadableBy {
-    ParentContainer(String),
-}
-
-impl LoadableBy<ItemLoadableBy> for Item {
-    fn select_by(by: &ItemLoadableBy) -> (String, Vec<(&str, &dyn rusqlite::ToSql)>) {
-        match by {
-            ItemLoadableBy::ParentContainer(id) => (
-                "SELECT * FROM items WHERE parent_container = :parent_container".into(),
-                vec![("parent_container", id)],
-            ),
-        }
-    }
-}
-
-#[allow(dead_code)]
-pub(crate) struct Tag {
-    pub item_id: String,
-    pub key: String,
-    pub value: String,
-}
-
-#[allow(dead_code)]
-pub enum TagLoadableBy {
-    ItemId(String),
-    Key(String),
-}
-
-impl Obj for Tag {
-    type Id = (String, String);
-
-    fn table_name() -> String {
-        "tag_associations".into()
-    }
-
-    fn where_clause() -> String {
-        "WHERE item_id = :item_id AND key = :key".into()
-    }
-
-    fn where_params((item_id, key): &Self::Id) -> Vec<(&str, &dyn rusqlite::ToSql)> {
-        vec![(":item_id", item_id), (":key", key)]
-    }
-
-    fn key_columns(&self) -> Vec<(&str, &dyn rusqlite::ToSql)> {
-        vec![("item_id", &self.item_id), ("key", &self.key)]
-    }
-
-    fn data_columns(&self) -> Vec<(&str, &dyn rusqlite::ToSql)> {
-        vec![("value", &self.value)]
-    }
-}
-
-impl LoadableBy<TagLoadableBy> for Tag {
-    fn select_by(by: &TagLoadableBy) -> (String, Vec<(&str, &dyn rusqlite::ToSql)>) {
-        match by {
-            TagLoadableBy::ItemId(id) => (
-                "SELECT * FROM tag_associations WHERE item_id = :item_id".into(),
-                vec![(":item_id", id)],
-            ),
-            TagLoadableBy::Key(key) => (
-                "SELECT * FROM tag_associations WHERE key = :key".into(),
-                vec![(":key", key)],
-            ),
-        }
-    }
-}
-
-impl FromRow for Tag {
-    fn from_row<'row, 'stmt: 'row>(
-        row: &'row rusqlite::Row<'stmt>,
-    ) -> Result<Self, rusqlite::Error> {
-        Ok(Tag {
-            item_id: row.get(0)?,
-            key: row.get(1)?,
-            value: row.get(2)?,
-        })
+impl DerefMut for DatabaseImpl {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.contents
     }
 }
