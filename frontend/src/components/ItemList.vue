@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 import localizedFormat from "dayjs/plugin/localizedFormat";
 
 import * as ItemAPI from "./ItemAPI.js";
+import BarcodeScanner from "./BarcodeScanner.vue";
 
 dayjs.extend(localizedFormat);
 </script>
@@ -10,6 +11,7 @@ dayjs.extend(localizedFormat);
 
 <script>
 export default {
+  components: { BarcodeScanner },
   data: () => ({
     items: null,
     loadingState: "pre-fetch",
@@ -50,6 +52,10 @@ export default {
     async checkIn(id) {
       this.items[id]._fe_await = true;
       this.items[id] = await ItemAPI.checkIn(id);
+    },
+
+    async onScan(t, r) {
+      this.$router.push(`/items/${t.toLowerCase()}`);
     },
   },
 };
@@ -136,5 +142,7 @@ export default {
         </tr>
       </tbody>
     </table>
+
+    <barcode-scanner @result="onScan" />
   </div>
 </template>

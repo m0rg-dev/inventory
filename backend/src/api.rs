@@ -118,6 +118,49 @@ pub async fn check_in(
 }
 
 #[debug_handler]
+pub async fn post_description(
+    Path(id): Path<Uuid>,
+    RawBody(body): RawBody,
+    Extension(state): Extension<Arc<State>>,
+) -> Result<Json<Item>, (StatusCode, String)> {
+    let body = hyper::body::to_bytes(body)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut db = state.db.lock().await;
+    handle_io_error(db.load().await)?;
+
+    let item = db.get(&id).cloned();
+    if let Some(mut item) = item {
+        item.description = String::from_utf8_lossy(&body).to_string();
+
+        db.insert(item.id, item.clone());
+
+        handle_io_error(db.save().await)?;
+
+        Ok(Json(item))
+    } else {
+        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
+    }
+}
+
+pub async fn print_label(
+    Path(id): Path<Uuid>,
+    Extension(state): Extension<Arc<State>>,
+) -> Result<(), (StatusCode, String)> {
+    let mut db = state.db.lock().await;
+    handle_io_error(db.load().await)?;
+
+    let item = db.get(&id);
+
+    if let Some(item) = item {
+        Ok(())
+    } else {
+        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
+    }
+}
+
+#[debug_handler]
 pub async fn put_tag(
     Path((id, tag)): Path<(Uuid, String)>,
     RawBody(body): RawBody,

@@ -46,6 +46,7 @@ async fn main() {
         .route("/items", post(post_item))
         .route("/items/:id/check_out", post(check_out))
         .route("/items/:id/check_in", post(check_in))
+        .route("/items/:id/description", post(post_description))
         .route("/items/:id/tags/:tag", put(put_tag))
         .route("/items/:id/tags/:tag", delete(delete_tag))
         .nest(

@@ -29,3 +29,9 @@ export async function deleteTag(id, k) {
     await fetch(`/items/${id}/tags/${k}`, { method: "DELETE" })
   ).json();
 }
+
+export async function updateDescription(id, desc) {
+  return await (
+    await fetch(`/items/${id}/description`, { method: "POST", body: desc })
+  ).json();
+}
