@@ -39,7 +39,6 @@ export default {
       bcid: "qrcode",
       text: this.id.toUpperCase(),
       scale: 5,
-      padding: 4,
       rotate: "L",
     });
 

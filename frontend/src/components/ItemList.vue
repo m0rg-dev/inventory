@@ -54,7 +54,7 @@ export default {
       this.items[id] = await ItemAPI.checkIn(id);
     },
 
-    async onScan(t, r) {
+    async onScan(t) {
       this.$router.push(`/items/${t.toLowerCase()}`);
     },
   },
