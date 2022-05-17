@@ -1,31 +1,31 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{fmt::Display, sync::Arc};
 
-use axum::{
-    extract::{Path, RawBody},
-    http::StatusCode,
-    Extension, Json,
-};
+use axum::{extract::Path, http::StatusCode, Extension, Json};
 use axum_macros::debug_handler;
-use chrono::Local;
-use serde::Deserialize;
+use tokio_postgres::types::Type;
 use tracing::{event, Level};
 use uuid::Uuid;
 
-use crate::{model::Item, State};
+use crate::{item::Item, State};
 
 #[debug_handler]
 pub async fn get_item(
     Path(id): Path<Uuid>,
     Extension(state): Extension<Arc<State>>,
 ) -> Result<Json<Item>, (StatusCode, String)> {
-    let mut db = state.db.lock().await;
-    handle_io_error(db.load().await)?;
+    let rows = handle_error(
+        state
+            .db
+            .read()
+            .await
+            .query("SELECT * FROM tags WHERE item_id=$1", &[&id])
+            .await,
+    )?;
 
-    let item = db.get(&id);
-
-    match item {
-        Some(item) => Ok(Json(item.clone())),
-        None => Err((StatusCode::NOT_FOUND, "Not Found\n".into())),
+    if !rows.is_empty() {
+        Ok(Json(Item::from_tag_rows(id, rows)))
+    } else {
+        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
     }
 }
 
@@ -33,180 +33,68 @@ pub async fn get_item(
 pub async fn get_items(
     Extension(state): Extension<Arc<State>>,
 ) -> Result<Json<Vec<Uuid>>, (StatusCode, String)> {
-    let mut db = state.db.lock().await;
-    handle_io_error(db.load().await)?;
+    let rows = handle_error(
+        state
+            .db
+            .read()
+            .await
+            .query("SELECT id FROM items", &[])
+            .await,
+    )?;
 
-    Ok(Json(db.keys().cloned().collect()))
-}
-
-#[derive(Deserialize)]
-pub struct PostItem {
-    description: String,
-    #[serde(default)]
-    is_container: bool,
-    #[serde(default)]
-    tags: HashMap<String, String>,
-    parent_container: Option<Uuid>,
+    Ok(Json(rows.iter().map(|r| r.get(0)).collect()))
 }
 
 #[debug_handler]
 pub async fn post_item(
-    Json(args): Json<PostItem>,
+    Json(item): Json<Item>,
     Extension(state): Extension<Arc<State>>,
 ) -> Result<Json<Item>, (StatusCode, String)> {
-    let mut db = state.db.lock().await;
-    handle_io_error(db.load().await)?;
+    let mut db = state.db.write().await;
+    let tx = handle_error(db.transaction().await)?;
 
-    let mut i = Item::new(args.description, args.is_container, args.parent_container);
+    handle_error(
+        tx.execute(
+            "INSERT INTO items (id) VALUES ($1) ON CONFLICT DO NOTHING",
+            &[&item.id],
+        )
+        .await,
+    )?;
 
-    for (k, v) in args.tags {
-        i.set_tag(k, v);
+    for (k, v) in &item.tags {
+        handle_error(
+            tx.execute(
+                "INSERT INTO tags (item_id, tag_name, tag_value)
+                              VALUES ($1, $2, $3)
+                              ON CONFLICT (item_id, tag_name) DO UPDATE SET tag_value = EXCLUDED.tag_value",
+                &[&item.id, k, v],
+            )
+            .await,
+        )?;
     }
 
-    db.insert(i.id, i.clone());
+    let stmt = handle_error(
+        tx.prepare_typed(
+            "DELETE FROM tags WHERE item_id=$1 AND tag_name <> ALL($2)",
+            &[Type::UUID, Type::TEXT_ARRAY],
+        )
+        .await,
+    )?;
 
-    handle_io_error(db.save().await)?;
+    handle_error(
+        tx.execute(
+            &stmt,
+            &[&item.id, &item.tags.keys().cloned().collect::<Vec<_>>()],
+        )
+        .await,
+    )?;
 
-    Ok(Json(i))
+    handle_error(tx.commit().await)?;
+
+    Ok(Json(item))
 }
 
-pub async fn check_out(
-    Path(id): Path<Uuid>,
-    Extension(state): Extension<Arc<State>>,
-) -> Result<Json<Item>, (StatusCode, String)> {
-    let mut db = state.db.lock().await;
-    handle_io_error(db.load().await)?;
-
-    let item = db.get(&id).cloned();
-
-    if let Some(mut item) = item {
-        // if it's already checked out, just NOP
-        if item.checked_out.is_none() {
-            item.checked_out = Some(Local::now().naive_local());
-        }
-
-        db.insert(item.id, item.clone());
-
-        handle_io_error(db.save().await)?;
-
-        Ok(Json(item))
-    } else {
-        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
-    }
-}
-
-pub async fn check_in(
-    Path(id): Path<Uuid>,
-    Extension(state): Extension<Arc<State>>,
-) -> Result<Json<Item>, (StatusCode, String)> {
-    let mut db = state.db.lock().await;
-    handle_io_error(db.load().await)?;
-
-    let item = db.get(&id).cloned();
-
-    if let Some(mut item) = item {
-        item.checked_out = None;
-
-        db.insert(item.id, item.clone());
-
-        handle_io_error(db.save().await)?;
-
-        Ok(Json(item))
-    } else {
-        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
-    }
-}
-
-#[debug_handler]
-pub async fn post_description(
-    Path(id): Path<Uuid>,
-    RawBody(body): RawBody,
-    Extension(state): Extension<Arc<State>>,
-) -> Result<Json<Item>, (StatusCode, String)> {
-    let body = hyper::body::to_bytes(body)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    let mut db = state.db.lock().await;
-    handle_io_error(db.load().await)?;
-
-    let item = db.get(&id).cloned();
-    if let Some(mut item) = item {
-        item.description = String::from_utf8_lossy(&body).to_string();
-
-        db.insert(item.id, item.clone());
-
-        handle_io_error(db.save().await)?;
-
-        Ok(Json(item))
-    } else {
-        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
-    }
-}
-
-pub async fn print_label(
-    Path(id): Path<Uuid>,
-    Extension(state): Extension<Arc<State>>,
-) -> Result<(), (StatusCode, String)> {
-    let mut db = state.db.lock().await;
-    handle_io_error(db.load().await)?;
-
-    let item = db.get(&id);
-
-    if let Some(item) = item {
-        Ok(())
-    } else {
-        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
-    }
-}
-
-#[debug_handler]
-pub async fn put_tag(
-    Path((id, tag)): Path<(Uuid, String)>,
-    RawBody(body): RawBody,
-    Extension(state): Extension<Arc<State>>,
-) -> Result<Json<Item>, (StatusCode, String)> {
-    let body = hyper::body::to_bytes(body)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    let mut db = state.db.lock().await;
-    handle_io_error(db.load().await)?;
-
-    let item = db.get(&id).cloned();
-    if let Some(mut item) = item {
-        item.set_tag(tag, String::from_utf8_lossy(&body).to_string());
-        db.insert(item.id, item.clone());
-
-        handle_io_error(db.save().await)?;
-
-        Ok(Json(item))
-    } else {
-        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
-    }
-}
-
-pub async fn delete_tag(
-    Path((id, tag)): Path<(Uuid, String)>,
-    Extension(state): Extension<Arc<State>>,
-) -> Result<Json<Item>, (StatusCode, String)> {
-    let mut db = state.db.lock().await;
-    handle_io_error(db.load().await)?;
-
-    let item = db.get(&id).cloned();
-    if let Some(mut item) = item {
-        item.delete_tag(tag);
-        db.insert(item.id, item.clone());
-
-        handle_io_error(db.save().await)?;
-
-        Ok(Json(item))
-    } else {
-        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
-    }
-}
-
-fn handle_io_error<T>(r: Result<T, std::io::Error>) -> Result<T, (StatusCode, String)> {
+fn handle_error<T, E: Display>(r: Result<T, E>) -> Result<T, (StatusCode, String)> {
     r.map_err(|e| {
         event!(Level::ERROR, "Internal server error: {e}");
         (
