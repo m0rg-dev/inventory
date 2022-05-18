@@ -10,16 +10,16 @@ dayjs.extend(localizedFormat);
 </script>
 
 <script lang="ts">
-import { defineComponent } from "vue";
+import { defineComponent, nextTick } from "vue";
 
 export default defineComponent({
   data() {
     return {
       item: null as Item,
-      editable_tag: null,
-      edit_key_to: null,
+      editable_key: null,
+      editable_value: null,
+      edit_to: null,
       editable_description: false,
-      edit_description_to: null,
       confirm_delete: false,
       associating: false,
       parent_description: "",
@@ -32,30 +32,58 @@ export default defineComponent({
   },
 
   methods: {
-    async renameTag(k1: string, k2: string, v: string) {
-      await this.item.deleteTag(k1);
-      await this.item.updateTag(k2, v);
-      this.editable_tag = null;
+    editKey(k: string) {
+      this.editable_key = this.edit_to = k;
+      this.editable_description = false;
     },
 
-    editTag(k: string) {
-      this.editable_tag = this.edit_key_to = k;
+    async doneEditingKey(e: FocusEvent, k: string) {
+
+      const v = this.item.tags[k];
+      await this.item.deleteTag(k);
+      await this.item.updateTag(this.edit_to, v);
+      this.editable_key = null;
+
+      nextTick(() => {
+        if (e.relatedTarget && e.relatedTarget instanceof Element && e.relatedTarget.id) {
+          document.getElementById(e.relatedTarget.id)?.focus();
+        }
+      });
+    },
+
+    editValue(k: string) {
+      this.editable_value = k;
+      this.edit_to = this.item.tags[k];
       this.editable_description = false;
+    },
+
+    async doneEditingValue(e: FocusEvent, k: string) {
+
+      await this.item.updateTag(k, this.edit_to);
+      this.editable_value = null;
+
+      nextTick(() => {
+        if (e.relatedTarget && e.relatedTarget instanceof Element && e.relatedTarget.id) {
+          document.getElementById(e.relatedTarget.id)?.focus();
+        }
+      });
     },
 
     newTag() {
       this.item.tags["New Tag"] = "New Value";
-      this.editable_tag = this.edit_key_to = "New Tag";
+      nextTick(() => {
+        document.getElementById("key-New Tag").focus();
+      });
     },
 
     editDescription() {
-      this.editable_tag = null;
+      this.editable_key = null;
       this.editable_description = true;
-      this.edit_description_to = this.item.getDescription();
+      this.edit_to = this.item.getDescription();
     },
 
     async updateDescription() {
-      await this.item.setDescription(this.edit_description_to);
+      await this.item.setDescription(this.edit_to);
       this.editable_description = false;
     },
 
@@ -102,7 +130,7 @@ export default defineComponent({
     <router-link to="/" class="btn btn-primary mb-3"><i class="bi-arrow-left"></i> Back</router-link>
     <div class="card p-3" v-if="item">
       <div class="card-body">
-        <input type="text" v-model="edit_description_to" @blur="updateDescription()" v-if="editable_description" />
+        <input type="text" v-model="edit_to" @blur="updateDescription()" v-if="editable_description" />
         <h4 class="card-title" v-else @click="editDescription()">
           {{ item.getDescription() || "<NO DESCRIPTION>" }}
         </h4>
@@ -143,16 +171,15 @@ export default defineComponent({
 
 
           <template v-for="k of Object.keys(item.tags).sort()" :key="k">
-            <li class="list-group-item">
-              <button class="btn btn-sm btn-danger mr-3" @click="item.deleteTag(k)">
-                <i class="bi-trash"></i></button>&nbsp;
-              <span v-if="k == editable_tag">
-                <input type="text" v-model="edit_key_to" @blur="renameTag(k, edit_key_to, item.tags[k])" />:
-                <input type="text" v-model="item.tags[k]" @blur="renameTag(k, edit_key_to, item.tags[k])" />
-              </span>
-              <span v-else @click="editTag(k)">
-                <code>{{ k }}: {{ item.tags[k] }}</code>
-              </span>
+            <li class="list-group-item" @blur="editable_key = null" tabindex=0>
+              <button class="btn btn-sm btn-danger me-3" @click="item.deleteTag(k)">
+                <i class="bi-trash"></i></button>
+              <span v-if="k == editable_key"><input type="text" :id="'key-' + k" v-model="edit_to"
+                  @blur="doneEditingKey($event, k)" /></span>
+              <span v-else><code @focus="editKey(k)" tabindex=0 :id="'key-' + k">{{ k }}</code></span><code>:</code>
+              <span v-if="k == editable_value"><input type="text" :id="'value-' + k" v-model="edit_to"
+                  @blur="doneEditingValue($event, k)" /></span>
+              <span v-else><code @focus="editValue(k)" tabindex=0 :id="'value-' + k">{{ item.tags[k] }}</code></span>
             </li>
           </template>
         </ul>
