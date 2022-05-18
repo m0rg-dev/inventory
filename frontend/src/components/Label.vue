@@ -36,6 +36,10 @@ export default {
     },
   },
 
+  data: () => ({
+    canvas: null
+  }),
+
   watch: {
     id() {
       this.update();
@@ -93,12 +97,29 @@ export default {
 
       ctx.restore();
 
+      this.canvas = canvas;
+
       document.getElementById("label").src = canvas.toDataURL("image/png");
     },
+
+    async print() {
+      this.canvas.toBlob((b) => {
+        fetch(`/api/label`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "image/png"
+          },
+          body: b
+        });
+      }, "image/png");
+    }
   },
 };
 </script>
 
 <template>
-  <div><img id="label" style="width: 100px; height: auto" /></div>
+  <div>
+    <button class="btn btn-primary btn-sm mb-2" @click="print"><i class="bi-printer"></i> Print label</button>
+    <div><img id="label" style="width: 100px; height: auto" /></div>
+  </div>
 </template>

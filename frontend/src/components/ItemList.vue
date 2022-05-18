@@ -28,7 +28,7 @@ export default {
   methods: {
     async fetchItems() {
       try {
-        let ids = await (await fetch("/items/")).json();
+        let ids = await (await fetch("/api/items/")).json();
         this.loadingState = "fetch-list";
 
         this.items = {};
@@ -76,6 +76,7 @@ export default {
 
     stopScanning() {
       this.scanning = false;
+      this.fetchItems();
     }
   },
 };

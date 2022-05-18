@@ -1,0 +1,2 @@
+- frontend error handling HOLY SHIT frontend error handling
+- continuous delivery

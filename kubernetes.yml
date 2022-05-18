@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  labels:
+    app: Inventory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: Inventory
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: Inventory
+    spec:
+      containers:
+        - name: inventory
+          image: docker.internal.m0rg.dev/inventory:latest
+          securityContext:
+            privileged: true
+          volumeMounts: 
+            - name: printer
+              mountPath: /dev/usb/lp0
+        - name: postgres
+          image: postgres
+          env:
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: trust
+          volumeMounts:
+            - name: inventory-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: inventory-data
+          persistentVolumeClaim:
+            claimName: inventory-claim
+        - name: printer
+          hostPath:
+            path: /dev/usb/lp0
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: inventory-claim
+  annotations:
+    nfs.io/storage-path: "inventory"
+spec:
+  storageClassName: nfs-client
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory
+  labels:
+    app: Inventory
+spec:
+  type: LoadBalancer
+  selector:
+    app: Inventory
+  ports:
+    - name: inventory
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: inventory-internal-m0rg-dev-tls
+spec:
+  commonName: inventory.internal.m0rg.dev
+  secretName: inventory-internal-m0rg-dev-tls
+  dnsNames:
+    - inventory.internal.m0rg.dev
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inventory-ingress
+  labels:
+    app: Inventory
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+    - secretName: inventory-internal-m0rg-dev-tls
+      hosts:
+        - inventory.internal.m0rg.dev
+  rules:
+  - host: inventory.internal.m0rg.dev
+    http:
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: inventory
+              port:
+                number: 8080

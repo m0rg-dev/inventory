@@ -1,3 +1,4 @@
 target
 .gitignore
 .dockerignore
+frontend/node_modules

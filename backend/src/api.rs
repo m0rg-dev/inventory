@@ -1,7 +1,12 @@
-use std::{fmt::Display, sync::Arc};
+use std::{fmt::Display, process::Stdio, sync::Arc};
 
-use axum::{extract::Path, http::StatusCode, Extension, Json};
+use axum::{
+    extract::{Path, RawBody},
+    http::StatusCode,
+    Extension, Json,
+};
 use axum_macros::debug_handler;
+use tokio::{io::AsyncWriteExt, process::Command};
 use tokio_postgres::types::Type;
 use tracing::{event, Level};
 use uuid::Uuid;
@@ -116,6 +121,29 @@ pub async fn delete_item(
             .execute("DELETE FROM items WHERE id=$1", &[&id])
             .await,
     )?;
+
+    Ok(())
+}
+
+pub async fn print_label(RawBody(b): RawBody) -> Result<(), (StatusCode, String)> {
+    let mut cmd = handle_error(
+        Command::new("sh")
+            .arg("-c")
+            .arg("brother_ql -b linux_kernel -p file:///dev/usb/lp0 -m QL-500 print -l 29 -")
+            .stdin(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn(),
+    )?;
+
+    handle_error(
+        cmd.stdin
+            .take()
+            .unwrap()
+            .write(&handle_error(hyper::body::to_bytes(b).await)?)
+            .await,
+    )?;
+
+    handle_error(cmd.wait().await)?;
 
     Ok(())
 }

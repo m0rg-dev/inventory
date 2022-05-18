@@ -9,11 +9,11 @@ export default class Item {
   }
 
   public static async load(id: string): Promise<Item> {
-    return new Item(id, (await (await fetch(`/items/${id}`)).json())["tags"]);
+    return new Item(id, (await (await fetch(`/api/items/${id}`)).json())["tags"]);
   }
 
   public async save() {
-    await fetch(`/items/`, {
+    await fetch(`/api/items/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -23,7 +23,7 @@ export default class Item {
   }
 
   public async delete() {
-    await fetch(`/items/${this.id}`, {
+    await fetch(`/api/items/${this.id}`, {
       method: "DELETE",
     });
   }

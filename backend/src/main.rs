@@ -66,15 +66,15 @@ async fn main() {
         .with(fmt_layer)
         .init();
 
-    let static_files = ServeDir::new("../frontend/dist/");
+    let static_files = ServeDir::new("./dist/");
 
     let app = Router::new()
-        .route("/items/:id", get(get_item))
-        .route("/items/:id", delete(delete_item))
-        .route("/items", get(get_items))
-        .route("/items", post(post_item))
-        .nest(
-            "/static/",
+        .route("/api/items/:id", get(get_item))
+        .route("/api/items/:id", delete(delete_item))
+        .route("/api/items", get(get_items))
+        .route("/api/items", post(post_item))
+        .route("/api/label", post(print_label))
+        .fallback(
             get_service(static_files).handle_error(|error: std::io::Error| async move {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
