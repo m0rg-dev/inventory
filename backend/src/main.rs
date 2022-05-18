@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use api::*;
+use axum::routing::delete;
 use axum::routing::get_service;
 use axum::routing::post;
 use axum::{routing::get, Extension, Router};
@@ -69,6 +70,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/items/:id", get(get_item))
+        .route("/items/:id", delete(delete_item))
         .route("/items", get(get_items))
         .route("/items", post(post_item))
         .nest(

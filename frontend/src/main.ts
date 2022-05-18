@@ -1,14 +1,15 @@
-import {createApp} from "vue";
+import { createApp } from "vue";
+import BootstrapVue3 from 'bootstrap-vue-3'
 import * as VueRouter from "vue-router";
 import ItemList from "./components/ItemList.vue";
 import SingleItem from "./components/SingleItem.vue";
 
 import 'bootstrap/dist/css/bootstrap.css';
-import 'bootstrap-vue/dist/bootstrap-vue.css';
+import 'bootstrap-vue-3/dist/bootstrap-vue-3.css';
 
 const routes = [
-    {path: "/", component: ItemList},
-    {path: "/items/:id", component: SingleItem}
+    { path: "/", component: ItemList },
+    { path: "/items/:id", component: SingleItem }
 ];
 
 const router = VueRouter.createRouter({
@@ -20,4 +21,5 @@ const router = VueRouter.createRouter({
 
 const app = createApp({});
 app.use(router);
+app.use(BootstrapVue3);
 app.mount("#app");

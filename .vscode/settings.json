@@ -1,6 +1,6 @@
 {
     "[vue]": {
-        "editor.defaultFormatter": "octref.vetur"
+        "editor.defaultFormatter": "Vue.volar"
     },
     "errorLens.excludeBySource": [
         "eslint(prettier/prettier)"

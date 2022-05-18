@@ -5,13 +5,16 @@ import bwipjs from "bwip-js";
 <script>
 // https://stackoverflow.com/a/16599668
 function getLines(ctx, text, maxWidth) {
-  var words = text.split(" ");
-  var lines = [];
-  var currentLine = words[0];
+  if (text == null) {
+    text = "";
+  }
+  let words = text.split(" ");
+  let lines = [];
+  let currentLine = words[0];
 
-  for (var i = 1; i < words.length; i++) {
-    var word = words[i];
-    var width = ctx.measureText(currentLine + " " + word).width;
+  for (let i = 1; i < words.length; i++) {
+    let word = words[i];
+    let width = ctx.measureText(currentLine + " " + word).width;
     if (width < maxWidth) {
       currentLine += " " + word;
     } else {
@@ -33,50 +36,65 @@ export default {
     },
   },
 
+  watch: {
+    id() {
+      this.update();
+    },
+    desc() {
+      this.update();
+    },
+  },
+
   mounted() {
-    const barcode_canvas = document.createElement("canvas");
-    bwipjs.toCanvas(barcode_canvas, {
-      bcid: "qrcode",
-      text: this.id.toUpperCase(),
-      scale: 5,
-      rotate: "L",
-    });
+    this.update();
+  },
 
-    const canvas = document.createElement("canvas");
-    canvas.height = 304 * 2;
-    canvas.width = 304;
+  methods: {
+    update() {
+      const barcode_canvas = document.createElement("canvas");
+      bwipjs.toCanvas(barcode_canvas, {
+        bcid: "qrcode",
+        text: this.id.toUpperCase(),
+        scale: 5,
+        rotate: "L",
+      });
 
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#eee";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(
-      barcode_canvas,
-      (canvas.width - barcode_canvas.width) / 2,
-      canvas.height - barcode_canvas.height
-    );
-    const size = 32;
+      const canvas = document.createElement("canvas");
+      canvas.height = 304 * 2;
+      canvas.width = 304;
 
-    ctx.font = `${size}px monospace`;
-    ctx.fillStyle = "black";
-    ctx.textAlign = "left";
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#eee";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(
+        barcode_canvas,
+        (canvas.width - barcode_canvas.width) / 2,
+        canvas.height - barcode_canvas.height
+      );
+      const size = 32;
 
-    ctx.save();
-    ctx.translate(50, canvas.height - barcode_canvas.height - 30);
-    ctx.rotate(-3.14159265 / 2);
+      ctx.font = `${size}px monospace`;
+      ctx.fillStyle = "black";
+      ctx.textAlign = "left";
 
-    const lines = getLines(
-      ctx,
-      this.desc,
-      canvas.height - barcode_canvas.height - 60
-    );
+      ctx.save();
+      ctx.translate(50, canvas.height - barcode_canvas.height - 30);
+      ctx.rotate(-3.14159265 / 2);
 
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], 0, size * i);
-    }
+      const lines = getLines(
+        ctx,
+        this.desc,
+        canvas.height - barcode_canvas.height - 60
+      );
 
-    ctx.restore();
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], 0, size * i);
+      }
 
-    document.getElementById("label").src = canvas.toDataURL("image/png");
+      ctx.restore();
+
+      document.getElementById("label").src = canvas.toDataURL("image/png");
+    },
   },
 };
 </script>

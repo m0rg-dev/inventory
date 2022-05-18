@@ -13,6 +13,19 @@ pub async fn get_item(
     Path(id): Path<Uuid>,
     Extension(state): Extension<Arc<State>>,
 ) -> Result<Json<Item>, (StatusCode, String)> {
+    let i = handle_error(
+        state
+            .db
+            .read()
+            .await
+            .query_opt("SELECT 1 FROM items WHERE id=$1", &[&id])
+            .await,
+    )?;
+
+    if i.is_none() {
+        return Err((StatusCode::NOT_FOUND, "Not Found\n".into()));
+    }
+
     let rows = handle_error(
         state
             .db
@@ -22,11 +35,7 @@ pub async fn get_item(
             .await,
     )?;
 
-    if !rows.is_empty() {
-        Ok(Json(Item::from_tag_rows(id, rows)))
-    } else {
-        Err((StatusCode::NOT_FOUND, "Not Found\n".into()))
-    }
+    Ok(Json(Item::from_tag_rows(id, rows)))
 }
 
 #[debug_handler]
@@ -92,6 +101,23 @@ pub async fn post_item(
     handle_error(tx.commit().await)?;
 
     Ok(Json(item))
+}
+
+#[debug_handler]
+pub async fn delete_item(
+    Path(id): Path<Uuid>,
+    Extension(state): Extension<Arc<State>>,
+) -> Result<(), (StatusCode, String)> {
+    handle_error(
+        state
+            .db
+            .read()
+            .await
+            .execute("DELETE FROM items WHERE id=$1", &[&id])
+            .await,
+    )?;
+
+    Ok(())
 }
 
 fn handle_error<T, E: Display>(r: Result<T, E>) -> Result<T, (StatusCode, String)> {
