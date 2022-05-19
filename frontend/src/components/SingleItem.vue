@@ -37,6 +37,7 @@ export default defineComponent({
     editKey(k: string) {
       this.editable_key = this.edit_to = k;
       this.editable_description = false;
+      this.editable_value = null;
     },
 
     async doneEditingKey(e: FocusEvent, k: string) {
@@ -61,6 +62,7 @@ export default defineComponent({
       this.editable_value = k;
       this.edit_to = this.item.tags[k];
       this.editable_description = false;
+      this.editable_key = null;
     },
 
     async doneEditingValue(e: FocusEvent, k: string) {
@@ -83,7 +85,7 @@ export default defineComponent({
     },
 
     editDescription() {
-      this.editable_key = null;
+      this.editable_key = this.editable_value = null;
       this.editable_description = true;
       this.edit_to = this.item.getDescription();
     },
