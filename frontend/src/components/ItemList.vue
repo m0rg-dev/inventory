@@ -67,16 +67,6 @@ export default {
       }
     },
 
-    async checkOut(id) {
-      this.items[id]._fe_await = true;
-      await this.items[id].checkOut();
-    },
-
-    async checkIn(id) {
-      this.items[id]._fe_await = true;
-      await this.items[id].checkIn(id);
-    },
-
     async onScan(t) {
       this.$router.push(`/items/${t.toLowerCase()}`);
     },
@@ -143,7 +133,7 @@ export default {
         <tr v-for="item of filtered_items || items" :key="item.id">
           <td>
             <router-link :to="'/items/' + item.id">{{
-                item.getDescription() || "<NO-DESCRIPTION>"
+                          item.getDescription() || "<NO-DESCRIPTION>"
             }}</router-link>
           </td>
           <td>{{ item._parent_desc }}</td>
