@@ -28,23 +28,17 @@ export default {
   methods: {
     async fetchItems() {
       try {
-        let ids = await (await fetch("/api/items/")).json();
+        let loaded = await (await fetch("/api/items/")).json();
+        console.log(loaded);
         this.loadingState = "fetch-list";
 
         this.items = {};
-        this.itemsRemaining = ids.length;
-        const promises = [];
 
-        for (const id of ids) {
-          promises.push((async () => {
-            this.items[id] = await Item.load(id);
-            this.itemsLoaded++;
-          })());
+        for (const id in loaded) {
+          this.items[id] = new Item(id, loaded[id].tags);
         }
 
-        await Promise.all(promises);
-
-        for (const id of ids) {
+        for (const id in this.items) {
           const pid = this.items[id].getParent();
           if (pid) {
             this.items[id]._parent_desc = this.items[pid].getDescription();
@@ -103,10 +97,6 @@ export default {
       <button class="btn btn-danger" disabled v-if="error">
         Failed to load items.
       </button>
-    </div>
-
-    <div class="progress" v-if="loadingState == 'fetch-list'">
-      <div class="progress-bar" :style="{ width: (itemsLoaded * 100) / itemsRemaining + '%' }"></div>
     </div>
 
     <div class="container">

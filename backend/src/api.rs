@@ -1,4 +1,4 @@
-use std::{fmt::Display, process::Stdio, sync::Arc};
+use std::{collections::HashMap, fmt::Display, process::Stdio, sync::Arc};
 
 use axum::{
     extract::{Path, RawBody},
@@ -39,12 +39,42 @@ pub async fn get_item(
 #[debug_handler]
 pub async fn get_items(
     Extension(state): Extension<Arc<State>>,
-) -> Result<Json<Vec<Uuid>>, (StatusCode, String)> {
+) -> Result<Json<HashMap<Uuid, Item>>, (StatusCode, String)> {
     let db = handle_error(state.db.get().await)?;
     let stmt = handle_error(db.prepare_cached("SELECT id FROM items").await)?;
-    let rows = handle_error(db.query(&stmt, &[]).await)?;
+    let ids = handle_error(db.query(&stmt, &[]).await)?;
 
-    Ok(Json(rows.iter().map(|r| r.get(0)).collect()))
+    let mut item_map: HashMap<Uuid, Item> = HashMap::with_capacity(ids.len());
+
+    let stmt = handle_error(db.prepare_cached("SELECT * FROM tags").await)?;
+    let tags = handle_error(db.query(&stmt, &[]).await)?;
+
+    for row in tags {
+        if let Some(item) = item_map.get_mut(&row.get(0)) {
+            item.tags.insert(row.get(1), row.get(2));
+        } else {
+            item_map.insert(
+                row.get(0),
+                Item {
+                    id: row.get(0),
+                    tags: {
+                        let mut m = HashMap::new();
+                        m.insert(row.get(1), row.get(2));
+                        m
+                    },
+                },
+            );
+        }
+    }
+
+    for id_row in ids {
+        item_map.entry(id_row.get(0)).or_insert_with(|| Item {
+            id: id_row.get(0),
+            tags: HashMap::new(),
+        });
+    }
+
+    Ok(Json(item_map))
 }
 
 #[debug_handler]
