@@ -97,4 +97,8 @@ export default class Item {
     const item = items[Math.floor(Math.random() * items.length)];
     await this.setParent(item.id);
   }
+
+  public async getContents(): Promise<Item[]> {
+    return Object.values(await Item.fetchAll()).filter((i: Item) => i.tags["_parent"]?.toLowerCase() == this.id.toLowerCase());
+  }
 }

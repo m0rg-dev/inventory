@@ -23,12 +23,14 @@ export default defineComponent({
       confirm_delete: false,
       associating: false,
       parent_description: "",
+      contents: null,
     };
   },
 
   async created() {
     this.item = await Item.load(this.$route.params.id);
     this.getParentDescription();
+    this.contents = await this.item.getContents();
   },
 
   methods: {
@@ -216,6 +218,16 @@ export default defineComponent({
                 item.getDescription()
             }} </button>
           </div>
+        </div>
+
+        <div v-if="contents.length > 0" class="mt-3">
+          <h5>Contents:</h5>
+          <ul class="list-group list-group-flush">
+            <li class="list-group-item" v-for="item in contents" :key="item.id">
+              <router-link class="me-3" :to="'/items/' + item.id">{{ item.getDescription() }}
+              </router-link>
+            </li>
+          </ul>
         </div>
       </div>
     </div>
