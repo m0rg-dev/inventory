@@ -36,7 +36,7 @@ export default {
 
         let items = await Item.fetchAll();
 
-        for (const id in this.items) {
+        for (const id in items) {
           const pid = items[id].getParent();
           if (pid) {
             items[id]._parent_desc = items[pid].getDescription();

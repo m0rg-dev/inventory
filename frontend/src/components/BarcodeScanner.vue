@@ -4,15 +4,21 @@ import { Html5QrcodeScanner } from "html5-qrcode";
 
 <script>
 export default {
+  data: () => ({
+    scanner: null
+  }),
   mounted() {
     const config = {
       fps: 10,
     };
-    const html5QrcodeScanner = new Html5QrcodeScanner(
+    this.scanner = new Html5QrcodeScanner(
       "qr-code-full-region",
       config
     );
-    html5QrcodeScanner.render(this.onScanSuccess);
+    this.scanner.render(this.onScanSuccess);
+  },
+  unmounted() {
+    this.scanner.clear();
   },
   methods: {
     onScanSuccess(decodedText, decodedResult) {
