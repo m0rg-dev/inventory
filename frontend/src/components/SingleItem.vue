@@ -153,7 +153,8 @@ export default defineComponent({
 
 
           <li class="list-group-item" v-if="item.getParent()">
-            Contained in: {{ parent_description }}
+            Contained in: <router-link class="me-3" :to="'/items/' + item.getParent()">{{ parent_description }}
+            </router-link>
             <button class="btn btn-sm btn-secondary" @click="item.removeParent()"><i class="bi-box-arrow-up"></i>
               Remove</button>
           </li>
