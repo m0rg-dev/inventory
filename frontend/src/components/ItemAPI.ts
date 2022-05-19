@@ -99,6 +99,8 @@ export default class Item {
   }
 
   public async getContents(): Promise<Item[]> {
-    return Object.values(await Item.fetchAll()).filter((i: Item) => i.tags["_parent"]?.toLowerCase() == this.id.toLowerCase());
+    const rc = Object.values(await Item.fetchAll()).filter((i: Item) => i.tags["_parent"]?.toLowerCase() == this.id.toLowerCase());
+    rc.sort((a, b) => a.getDescription().localeCompare(b.getDescription()));
+    return rc;
   }
 }

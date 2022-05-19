@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import dayjs from "dayjs";
 import { v4 as uuidv4 } from "uuid";
 import localizedFormat from "dayjs/plugin/localizedFormat";
@@ -11,10 +11,12 @@ dayjs.extend(localizedFormat);
 </script>
 
 
-<script>
-export default {
+<script lang="ts">
+import { defineComponent } from "vue";
+
+export default defineComponent({
   data: () => ({
-    items: null,
+    items: null as Item[],
     filtered_items: null,
     fuse: null,
     loadingState: "pre-fetch",
@@ -39,11 +41,13 @@ export default {
         for (const id in items) {
           const pid = items[id].getParent();
           if (pid) {
-            items[id]._parent_desc = items[pid].getDescription();
+            items[id]["_parent_desc"] = items[pid].getDescription();
           }
         }
 
         this.items = Object.values(items);
+
+        this.items.sort((a: Item, b: Item) => a.getDescription().localeCompare(b.getDescription()));
 
         this.fuse = new Fuse(Object.values(this.items), {
           includeScore: true,
@@ -87,7 +91,7 @@ export default {
       this.fetchItems();
     }
   },
-};
+});
 </script>
 
 <template>
@@ -133,7 +137,7 @@ export default {
         <tr v-for="item of filtered_items || items" :key="item.id">
           <td>
             <router-link :to="'/items/' + item.id">{{
-                          item.getDescription() || "<NO-DESCRIPTION>"
+                item.getDescription() || "<NO-DESCRIPTION>"
             }}</router-link>
           </td>
           <td>{{ item._parent_desc }}</td>

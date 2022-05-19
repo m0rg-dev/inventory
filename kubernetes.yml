@@ -23,7 +23,7 @@ spec:
             privileged: true
           volumeMounts: 
             - name: printer
-              mountPath: /dev/usb/lp0
+              mountPath: /dev/usb
         - name: postgres
           image: postgres
           env:
@@ -38,7 +38,7 @@ spec:
             claimName: inventory-claim
         - name: printer
           hostPath:
-            path: /dev/usb/lp0
+            path: /dev/usb
 ---
 kind: PersistentVolumeClaim
 apiVersion: v1
