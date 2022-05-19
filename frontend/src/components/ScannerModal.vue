@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BarcodeScanner from "./BarcodeScanner.vue";
+import Fuse from "fuse.js";
 </script>
 
 <script lang="ts">
@@ -15,10 +16,31 @@ export default defineComponent({
     data: () => ({
         id: "",
         show_inter: false,
-        item: null
+        search_query: null,
+        item: null,
+        items: null,
+        filtered_items: null,
+        fuse: null,
     }),
 
     methods: {
+        async updateSearch() {
+            if (!this.items) {
+                this.items = Object.values(await Item.fetchAll());
+                this.fuse = new Fuse(Object.values(this.items), {
+                    includeScore: true,
+                    useExtendedSearch: true,
+                    keys: ["tags._description"]
+                });
+            }
+
+            if (this.search_query.length > 0) {
+                this.filtered_items = this.fuse.search(this.search_query).map((i: { item: Item; }) => i.item).slice(0, 10);
+            } else {
+                this.filtered_items = null;
+            }
+        },
+
         close() {
             this.$emit("close");
         },
@@ -48,6 +70,17 @@ export default defineComponent({
         <div v-if="show" class="modal-mask" @keyup.esc="close">
             <div class="card m-auto p-3" style="max-width:35rem">
                 <div class="card-body">
+                    <div v-if="!show_inter">
+                        <input type="text" class="form-control my-3" placeholder="Search" @input="updateSearch"
+                            v-model="search_query" />
+
+                        <div v-if="filtered_items" class="list-group">
+                            <button v-for="item of filtered_items" :key="item.id"
+                                class="list-group-item list-group-item-action" @click="scan(item.id)">
+                                {{ item.getDescription() }}</button>
+                        </div>
+                    </div>
+
                     <BarcodeScanner @result="scan"></BarcodeScanner>
 
                     <div v-if="show_inter" class="py-2">

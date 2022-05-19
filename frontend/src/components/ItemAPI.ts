@@ -12,6 +12,16 @@ export default class Item {
     return new Item(id, (await (await fetch(`/api/items/${id}`)).json())["tags"]);
   }
 
+  public static async fetchAll(): Promise<{ [k: string]: Item }> {
+    let loaded = await (await fetch("/api/items/")).json();
+    let items = {};
+    for (const id in loaded) {
+      items[id] = new Item(id, loaded[id].tags);
+    }
+
+    return items;
+  }
+
   public async save() {
     await fetch(`/api/items/`, {
       method: "POST",

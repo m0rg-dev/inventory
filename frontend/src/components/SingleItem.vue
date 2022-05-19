@@ -109,6 +109,8 @@ export default defineComponent({
     },
 
     async associate(id: string) {
+      console.log("associate ", id);
+
       await this.item.setParent(id);
       this.associating = false;
       this.getParentDescription();

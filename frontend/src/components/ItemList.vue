@@ -2,6 +2,7 @@
 import dayjs from "dayjs";
 import { v4 as uuidv4 } from "uuid";
 import localizedFormat from "dayjs/plugin/localizedFormat";
+import Fuse from "fuse.js";
 
 import Item, * as ItemAPI from "./ItemAPI";
 import ScannerModal from "./ScannerModal.vue";
@@ -14,11 +15,14 @@ dayjs.extend(localizedFormat);
 export default {
   data: () => ({
     items: null,
+    filtered_items: null,
+    fuse: null,
     loadingState: "pre-fetch",
     itemsLoaded: 0,
     itemsRemaining: 0,
     error: null,
     scanning: false,
+    search_query: null
   }),
 
   async created() {
@@ -28,22 +32,24 @@ export default {
   methods: {
     async fetchItems() {
       try {
-        let loaded = await (await fetch("/api/items/")).json();
-        console.log(loaded);
         this.loadingState = "fetch-list";
 
-        this.items = {};
-
-        for (const id in loaded) {
-          this.items[id] = new Item(id, loaded[id].tags);
-        }
+        let items = await Item.fetchAll();
 
         for (const id in this.items) {
-          const pid = this.items[id].getParent();
+          const pid = items[id].getParent();
           if (pid) {
-            this.items[id]._parent_desc = this.items[pid].getDescription();
+            items[id]._parent_desc = items[pid].getDescription();
           }
         }
+
+        this.items = Object.values(items);
+
+        this.fuse = new Fuse(Object.values(this.items), {
+          includeScore: true,
+          useExtendedSearch: true,
+          keys: ["tags._description"]
+        });
 
         this.loadingState = "fetched";
       } catch (e) {
@@ -52,14 +58,23 @@ export default {
       }
     },
 
+    updateSearch() {
+      if (this.search_query.length > 0) {
+        this.filtered_items = this.fuse.search(this.search_query).map((i) => i.item);
+        console.log(this.filtered_items);
+      } else {
+        this.filtered_items = null;
+      }
+    },
+
     async checkOut(id) {
       this.items[id]._fe_await = true;
-      this.items[id] = await ItemAPI.checkOut(id);
+      await this.items[id].checkOut();
     },
 
     async checkIn(id) {
       this.items[id]._fe_await = true;
-      this.items[id] = await ItemAPI.checkIn(id);
+      await this.items[id].checkIn(id);
     },
 
     async onScan(t) {
@@ -116,16 +131,18 @@ export default {
       </span>
     </div>
 
-    <table class="table" v-if="items">
+    <input type="text" class="form-control my-3" placeholder="Search" @input="updateSearch" v-model="search_query" />
+
+    <table class="table" v-if="items || filtered_items">
       <thead>
         <th>Description</th>
         <th>Stored In</th>
         <th style="width: 20rem">Checked Out</th>
       </thead>
       <tbody>
-        <tr v-for="(item, id) in items" :key="id">
+        <tr v-for="item of filtered_items || items" :key="item.id">
           <td>
-            <router-link :to="'/items/' + id">{{
+            <router-link :to="'/items/' + item.id">{{
                 item.getDescription() || "<NO-DESCRIPTION>"
             }}</router-link>
           </td>
