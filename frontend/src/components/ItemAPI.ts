@@ -73,7 +73,7 @@ export default class Item {
   }
 
   public getParent(): string {
-    return this.tags["_parent"];
+    return this.tags["_parent"]?.toLowerCase();
   }
 
   public async setParent(parent: string) {
