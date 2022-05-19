@@ -46,7 +46,11 @@ export default defineComponent({
 
       nextTick(() => {
         if (e.relatedTarget && e.relatedTarget instanceof Element && e.relatedTarget.id) {
-          document.getElementById(e.relatedTarget.id)?.focus();
+          if (e.relatedTarget.id == `value-${k}`) {
+            document.getElementById(`value-${this.edit_to}`)?.focus();
+          } else {
+            document.getElementById(e.relatedTarget.id)?.focus();
+          }
         }
       });
     },
@@ -122,6 +126,11 @@ export default defineComponent({
       } else {
         return "";
       }
+    },
+
+    async rollStorage() {
+      await this.item.rollStorage();
+      this.getParentDescription();
     }
   },
 });
@@ -151,6 +160,8 @@ export default defineComponent({
           <li class="list-group-item" v-else>Not inside a container.
             <button class="btn btn-sm btn-primary" @click="startAssociating()"><i class="bi-archive"></i>
               Associate</button>
+            <button class="btn btn-sm btn-secondary ms-3" @click="rollStorage()"><i class="bi-shuffle"></i>
+              Place</button>
           </li>
 
 
@@ -178,7 +189,7 @@ export default defineComponent({
                 <i class="bi-trash"></i></button>
               <span v-if="k == editable_key"><input type="text" :id="'key-' + k" v-model="edit_to"
                   @blur="doneEditingKey($event, k)" /></span>
-              <span v-else><code @focus="editKey(k)" tabindex=0 :id="'key-' + k">{{ k }}</code></span><code>:</code>
+              <span v-else><code @focus="editKey(k)" tabindex=0 :id="'key-' + k">{{ k }}</code></span><code>: </code>
               <span v-if="k == editable_value"><input type="text" :id="'value-' + k" v-model="edit_to"
                   @blur="doneEditingValue($event, k)" /></span>
               <span v-else><code @focus="editValue(k)" tabindex=0 :id="'value-' + k">{{ item.tags[k] }}</code></span>

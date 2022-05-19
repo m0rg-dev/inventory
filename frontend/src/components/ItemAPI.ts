@@ -1,3 +1,5 @@
+import { isValidHtml5QrcodeSupportedFormats } from "html5-qrcode/esm/core";
+
 export default class Item {
   private id: string;
   // TODO this shouldn't be public...
@@ -88,5 +90,11 @@ export default class Item {
 
   public getID(): string {
     return this.id;
+  }
+
+  public async rollStorage() {
+    const items = Object.values(await Item.fetchAll()).filter((i: Item) => i.tags["placeable"]);
+    const item = items[Math.floor(Math.random() * items.length)];
+    await this.setParent(item.id);
   }
 }
