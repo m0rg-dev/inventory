@@ -5,8 +5,12 @@ use axum::routing::delete;
 use axum::routing::get_service;
 use axum::routing::post;
 use axum::{routing::get, Extension, Router};
+use deadpool_postgres::Config;
+use deadpool_postgres::ManagerConfig;
+use deadpool_postgres::PoolConfig;
+use deadpool_postgres::Runtime;
 use hyper::StatusCode;
-use tokio::sync::RwLock;
+use tokio_postgres::NoTls;
 use tower::ServiceBuilder;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -17,23 +21,26 @@ mod api;
 mod item;
 
 pub struct State {
-    db: RwLock<tokio_postgres::Client>,
+    db: deadpool_postgres::Pool,
 }
 
 #[tokio::main]
 async fn main() {
-    let (client, connection) =
-        tokio_postgres::connect("host=localhost user=postgres", tokio_postgres::NoTls)
-            .await
-            .unwrap();
-
-    // The connection object performs the actual communication with the database,
-    // so spawn it off to run on its own.
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
-        }
+    let mut db_cfg = Config::new();
+    db_cfg.host = Some("localhost".into());
+    db_cfg.user = Some("postgres".into());
+    db_cfg.dbname = Some("postgres".into());
+    db_cfg.manager = Some(ManagerConfig {
+        recycling_method: deadpool_postgres::RecyclingMethod::Fast,
     });
+    db_cfg.pool = Some(PoolConfig {
+        max_size: 128,
+        timeouts: Default::default(),
+    });
+
+    let pool = db_cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
+
+    let client = pool.get().await.unwrap();
 
     client
         .batch_execute(
@@ -51,9 +58,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let shared_state = Arc::new(State {
-        db: RwLock::new(client),
-    });
+    let shared_state = Arc::new(State { db: pool });
 
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("info"))

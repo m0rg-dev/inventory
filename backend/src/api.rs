@@ -18,27 +18,20 @@ pub async fn get_item(
     Path(id): Path<Uuid>,
     Extension(state): Extension<Arc<State>>,
 ) -> Result<Json<Item>, (StatusCode, String)> {
-    let i = handle_error(
-        state
-            .db
-            .read()
-            .await
-            .query_opt("SELECT 1 FROM items WHERE id=$1", &[&id])
-            .await,
-    )?;
+    let db = handle_error(state.db.get().await)?;
+    let stmt = handle_error(db.prepare_cached("SELECT 1 FROM items WHERE id=$1").await)?;
+    let i = handle_error(db.query_opt(&stmt, &[&id]).await)?;
 
     if i.is_none() {
         return Err((StatusCode::NOT_FOUND, "Not Found\n".into()));
     }
 
-    let rows = handle_error(
-        state
-            .db
-            .read()
-            .await
-            .query("SELECT * FROM tags WHERE item_id=$1", &[&id])
+    let stmt = handle_error(
+        db.prepare_cached("SELECT * FROM tags WHERE item_id=$1")
             .await,
     )?;
+
+    let rows = handle_error(db.query(&stmt, &[&id]).await)?;
 
     Ok(Json(Item::from_tag_rows(id, rows)))
 }
@@ -47,14 +40,9 @@ pub async fn get_item(
 pub async fn get_items(
     Extension(state): Extension<Arc<State>>,
 ) -> Result<Json<Vec<Uuid>>, (StatusCode, String)> {
-    let rows = handle_error(
-        state
-            .db
-            .read()
-            .await
-            .query("SELECT id FROM items", &[])
-            .await,
-    )?;
+    let db = handle_error(state.db.get().await)?;
+    let stmt = handle_error(db.prepare_cached("SELECT id FROM items").await)?;
+    let rows = handle_error(db.query(&stmt, &[]).await)?;
 
     Ok(Json(rows.iter().map(|r| r.get(0)).collect()))
 }
@@ -64,31 +52,29 @@ pub async fn post_item(
     Json(item): Json<Item>,
     Extension(state): Extension<Arc<State>>,
 ) -> Result<Json<Item>, (StatusCode, String)> {
-    let mut db = state.db.write().await;
+    let mut db = handle_error(state.db.get().await)?;
     let tx = handle_error(db.transaction().await)?;
 
-    handle_error(
-        tx.execute(
-            "INSERT INTO items (id) VALUES ($1) ON CONFLICT DO NOTHING",
-            &[&item.id],
-        )
-        .await,
+    let stmt = handle_error(
+        tx.prepare_cached("INSERT INTO items (id) VALUES ($1) ON CONFLICT DO NOTHING")
+            .await,
     )?;
+    handle_error(tx.execute(&stmt, &[&item.id]).await)?;
 
     for (k, v) in &item.tags {
-        handle_error(
-            tx.execute(
+        let stmt = handle_error(
+            tx.prepare_cached(
                 "INSERT INTO tags (item_id, tag_name, tag_value)
-                              VALUES ($1, $2, $3)
-                              ON CONFLICT (item_id, tag_name) DO UPDATE SET tag_value = EXCLUDED.tag_value",
-                &[&item.id, k, v],
+                          VALUES ($1, $2, $3)
+                          ON CONFLICT (item_id, tag_name) DO UPDATE SET tag_value = EXCLUDED.tag_value",
             )
             .await,
         )?;
+        handle_error(tx.execute(&stmt, &[&item.id, k, v]).await)?;
     }
 
     let stmt = handle_error(
-        tx.prepare_typed(
+        tx.prepare_typed_cached(
             "DELETE FROM tags WHERE item_id=$1 AND tag_name <> ALL($2)",
             &[Type::UUID, Type::TEXT_ARRAY],
         )
@@ -116,8 +102,9 @@ pub async fn delete_item(
     handle_error(
         state
             .db
-            .read()
+            .get()
             .await
+            .unwrap()
             .execute("DELETE FROM items WHERE id=$1", &[&id])
             .await,
     )?;

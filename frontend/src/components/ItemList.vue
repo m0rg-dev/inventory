@@ -33,13 +33,22 @@ export default {
 
         this.items = {};
         this.itemsRemaining = ids.length;
+        const promises = [];
+
         for (const id of ids) {
-          this.items[id] = await Item.load(id);
+          promises.push((async () => {
+            this.items[id] = await Item.load(id);
+            this.itemsLoaded++;
+          })());
+        }
+
+        await Promise.all(promises);
+
+        for (const id of ids) {
           const pid = this.items[id].getParent();
           if (pid) {
-            this.items[id]._parent_desc = (await Item.load(pid)).getDescription();
+            this.items[id]._parent_desc = this.items[pid].getDescription();
           }
-          this.itemsLoaded++;
         }
 
         this.loadingState = "fetched";
