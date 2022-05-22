@@ -2,14 +2,12 @@
 
 Hacky little Vue.js / Rust-based inventory system for personal use.
 
-This project isn't finished yet, and you might have a hard time running it on
-your own hardware. Currently, it hard-assumes that PostgreSQL is available on
-localhost:5432 with no authentication and that you have a Brother QL-500 printer
-at `/dev/usb/lp0` (if you want to print labels).
+This project isn't finished yet. I made it to solve a problem I had
+with equipment I owned; if you have different problems it might not be
+useful, and if you have different equipment it might not be usable.
 
-If you want to try it anyways, go ahead and run PostgreSQL in a Docker container
-locally with something like `docker run --rm -it -p 5432:5432 -e
-POSTGRES_HOST_AUTH_METHOD=trust postgres`, then start the backend with a `cargo
-run` (in `./backend`), then start the dev frontend server with a `npm install`
-and `npm run dev`. Assuming you have enough terminal windows open, it should pop
-up the interface on `localhost:3000`.
+If you'd like to check it out anyways, go ahead and `docker-compose
+build && docker-compose up` to start a containerized development
+server. Give it a couple seconds to get going and browse to
+`localhost:3000` for the web interface. Both the frontend and backend
+components will hot-reload in case you want to try changes out.

@@ -1,3 +1,4 @@
+use std::env;
 use std::sync::Arc;
 
 use api::*;
@@ -27,7 +28,7 @@ pub struct State {
 #[tokio::main]
 async fn main() {
     let mut db_cfg = Config::new();
-    db_cfg.host = Some("localhost".into());
+    db_cfg.host = Some(env::var("DB_HOST").unwrap_or_else(|_| "localhost".into()));
     db_cfg.user = Some("postgres".into());
     db_cfg.dbname = Some("postgres".into());
     db_cfg.manager = Some(ManagerConfig {
